@@ -7,7 +7,11 @@ import torch
 from genlm.backend.llm import AsyncTransformer
 from genlm.backend.llm import AsyncVirtualLM
 from genlm.backend.llm import MockAsyncLM
-from genlm.backend.llm import AsyncMlxLM
+
+try:
+    from genlm.backend.llm import AsyncMlxLM
+except ImportError:
+    AsyncMlxLM = None  # type: ignore[assignment,misc]
 
 VLLM_AVAILABLE = True
 try:
