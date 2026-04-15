@@ -7,6 +7,7 @@ import numpy as np
 
 from ..util import logsumexp
 from .smc_record import SMCRecord
+from .resampling import get_resampling_fn
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,10 @@ async def smc_standard(
     visualization_dir=None,
     json_file=None,
     seed_particles=None,
+    resampling_method="multinomial",
 ):
     """
-    Standard sequential Monte Carlo algorithm with multinomial resampling.
+    Standard sequential Monte Carlo algorithm.
 
     Args:
         model (llamppl.modeling.Model): The model to perform inference on.
@@ -31,10 +33,13 @@ async def smc_standard(
         seed_particles (list[llamppl.modeling.Model] | None): Pre-constructed particles
             (already started, optionally finished) to include in the particle pool.
             Counted against n_particles; the remainder are deep-copied from `model`.
+        resampling_method (str): One of 'multinomial', 'stratified', 'systematic', or 'residual'. Defaults to 'multinomial'.
 
     Returns:
         particles (list[llamppl.modeling.Model]): The completed particles after inference.
     """
+    resample_fn = get_resampling_fn(resampling_method)
+
     seed_particles = list(seed_particles) if seed_particles else []
     n_seed = len(seed_particles)
     if n_seed > n_particles:
@@ -81,6 +86,10 @@ async def smc_standard(
 
         # Normalize weights
         W = np.array([p.weight for p in particles])
+        if np.all(W == -np.inf):
+            # All particles dead — skip resampling to avoid NaNs
+            did_resample = False
+            continue
         w_sum = logsumexp(W)
         normalized_weights = W - w_sum
 
@@ -88,12 +97,8 @@ async def smc_standard(
         if -logsumexp(normalized_weights * 2) < np.log(ess_threshold) + np.log(
             n_particles
         ):
-            # Alternative implementation uses a multinomial distribution and only makes n-1 copies, reusing existing one, but fine for now
             probs = np.exp(normalized_weights)
-            ancestor_indices = [
-                np.random.choice(range(len(particles)), p=probs)
-                for _ in range(n_particles)
-            ]
+            ancestor_indices = resample_fn(probs).tolist()
 
             if record:
                 # Sort the ancestor indices
