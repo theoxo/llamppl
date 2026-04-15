@@ -2,7 +2,6 @@
 
 import string
 import warnings
-from collections import defaultdict
 
 import torch
 from genlm.backend.llm import AsyncTransformer
